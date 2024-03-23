@@ -147,17 +147,15 @@ func main() { //nolint
 	log.DefaultLogLevel = logging.LogLevelError
 	log.DefaultLogLevel = logging.LogLevelTrace
 
-	//mux := ice.NewUDPMuxDefault(ice.UDPMuxParams{UDPConn: udpconn})
+	mux := ice.NewUDPMuxDefault(ice.UDPMuxParams{UDPConn: udpconn})
 
-	udpMuxSrflx := ice.NewUniversalUDPMuxDefault(ice.UniversalUDPMuxParams{
-		UDPConn: udpconn,
-	})
+	//udpMuxSrflx := ice.NewUniversalUDPMuxDefault(ice.UniversalUDPMuxParams{UDPConn: udpconn,})
 
 	cfg := &ice.AgentConfig{
 		NAT1To1IPs:             []string{*hostip},
 		NAT1To1IPCandidateType: ice.CandidateTypeHost,
-		//UDPMux: mux,
-		UDPMuxSrflx:   udpMuxSrflx,
+		UDPMux:                 mux,
+		//UDPMuxSrflx:   udpMuxSrflx,
 		NetworkTypes:  []ice.NetworkType{ice.NetworkTypeUDP4},
 		LoggerFactory: log,
 		Urls: []*stun.URI{
