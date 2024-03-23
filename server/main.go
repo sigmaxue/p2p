@@ -10,11 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -26,15 +23,11 @@ import (
 
 //nolint:gochecknoglobals
 var (
-	isControlling                 bool
-	iceAgent                      *ice.Agent
-	remoteAuthChannel             chan string
-	localHTTPPort, remoteHTTPPort int
+	iceAgent          *ice.Agent
+	remoteAuthChannel chan string
 )
 var remoteUfrag = ""
 var remotePwd = ""
-var localUfrag = ""
-var localPwd = ""
 var localCandidate []string
 
 type SDP struct {
@@ -131,15 +124,9 @@ func main() { //nolint
 	)
 
 	remoteAuthChannel = make(chan string, 3)
-	flag.BoolVar(&isControlling, "controlling", false, "is ICE Agent controlling")
 	sdpip := flag.String("ip", "1.1.1.1", "http remote ip")
+	localHTTPPort := flag.Int("port", 9000, "local listen port")
 	flag.Parse()
-
-	if isControlling {
-		localHTTPPort = 9000
-	} else {
-		remoteHTTPPort = 9000
-	}
 
 	http.HandleFunc("/remoteAuth", remoteAuth)
 	go func() {
@@ -167,6 +154,8 @@ func main() { //nolint
 	})
 
 	cfg := &ice.AgentConfig{
+		NAT1To1IPs:             []string{*sdpip},
+		NAT1To1IPCandidateType: ice.CandidateTypeHost,
 		//UDPMux: mux,
 		UDPMuxSrflx:   udpMuxSrflx,
 		NetworkTypes:  []ice.NetworkType{ice.NetworkTypeUDP4},
@@ -174,16 +163,10 @@ func main() { //nolint
 		Urls: []*stun.URI{
 			{
 				Scheme: stun.SchemeTypeSTUN,
-				Host:   *sdpip,
-				Port:   9000,
+				Host:   "stun.l.google.com",
+				Port:   19302,
 				Proto:  stun.ProtoTypeUDP,
 			},
-			// {
-			// 	Scheme:   stun.SchemeTypeSTUN,
-			// 	Host:     "stun.l.google.com",
-			// 	Port:     19302,
-			// 	Proto:    stun.ProtoTypeUDP,
-			// },
 		},
 	}
 	iceAgent, err = ice.NewAgent(cfg)
@@ -204,7 +187,7 @@ func main() { //nolint
 	}
 
 	// Get the local auth details and send to remote peer
-	localUfrag, localPwd, err = iceAgent.GetLocalUserCredentials()
+	localUfrag, localPwd, err := iceAgent.GetLocalUserCredentials()
 	if err != nil {
 		panic(err)
 	}
@@ -223,66 +206,17 @@ func main() { //nolint
 		panic(err)
 	}
 
-	if isControlling {
-		fmt.Println("Local Agent is controlling")
+	fmt.Println("Local Agent is controlling")
 
-		remoteUfrag = <-remoteAuthChannel
-		remotePwd = <-remoteAuthChannel
-		fmt.Printf("%s => %s \n", remoteUfrag, remotePwd)
+	remoteUfrag = <-remoteAuthChannel
+	remotePwd = <-remoteAuthChannel
+	fmt.Printf("%s => %s \n", remoteUfrag, remotePwd)
 
-		conn, err = iceAgent.Accept(context.TODO(), remoteUfrag, remotePwd)
-		if err != nil {
-			panic(err)
-		}
-
-	} else {
-		fmt.Println("Local Agent is controlled")
-		fmt.Print("Press 'Enter' when both processes have started")
-		if _, err = bufio.NewReader(os.Stdin).ReadBytes('\n'); err != nil {
-			panic(err)
-		}
-
-		fmt.Println("SDP", sdp)
-		// 序列化为 JSON 字符串
-		response, err := http.PostForm(fmt.Sprintf("http://%s:%d/remoteAuth", *sdpip, remoteHTTPPort), //nolint
-			url.Values{
-				"sdp": {MarshalSdp(sdp)},
-				//"ufrag": {localUfrag},
-				//"pwd":   {localPwd},
-				//"candidate": {localCandidate},
-			})
-		if err != nil {
-			panic(err)
-		}
-		body, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			fmt.Println("Failed to read response body:", err)
-			return
-		}
-		// 反序列化为数据结构
-		var sdpr SDP
-		sdpr = UnMarshalSdp(string(body))
-		remoteUfrag = sdpr.ufrag
-		remotePwd = sdpr.pwd
-		//candidate := headers["X-Candidate"][0]
-		fmt.Printf("Remote ufrag: %s => pwd: %s \n", remoteUfrag, remotePwd)
-
-		for _, v := range sdpr.candidate {
-			fmt.Printf("Client Remote candidate: %s\n", v)
-			c0, err := ice.UnmarshalCandidate(v)
-			if err != nil {
-				panic(err)
-			}
-
-			if err := iceAgent.AddRemoteCandidate(c0); err != nil { //nolint:contextcheck
-				panic(err)
-			}
-		}
-		conn, err = iceAgent.Dial(context.TODO(), remoteUfrag, remotePwd)
-		if err != nil {
-			panic(err)
-		}
+	conn, err = iceAgent.Accept(context.TODO(), remoteUfrag, remotePwd)
+	if err != nil {
+		panic(err)
 	}
+
 	// 打印本地地址和远程地址
 	localAddr := conn.LocalAddr()
 	remoteAddr := conn.RemoteAddr()
