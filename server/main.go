@@ -124,13 +124,13 @@ func main() { //nolint
 	)
 
 	remoteAuthChannel = make(chan string, 3)
-	sdpip := flag.String("ip", "1.1.1.1", "http remote ip")
+	hostip := flag.String("ip", "1.1.1.1", "sdp host ip")
 	localHTTPPort := flag.Int("port", 9000, "local listen port")
 	flag.Parse()
 
 	http.HandleFunc("/remoteAuth", remoteAuth)
 	go func() {
-		if err = http.ListenAndServe(fmt.Sprintf(":%d", localHTTPPort), nil); err != nil { //nolint:gosec
+		if err = http.ListenAndServe(fmt.Sprintf(":%d", *localHTTPPort), nil); err != nil { //nolint:gosec
 			panic(err)
 		}
 	}()
@@ -154,7 +154,7 @@ func main() { //nolint
 	})
 
 	cfg := &ice.AgentConfig{
-		NAT1To1IPs:             []string{*sdpip},
+		NAT1To1IPs:             []string{*hostip},
 		NAT1To1IPCandidateType: ice.CandidateTypeHost,
 		//UDPMux: mux,
 		UDPMuxSrflx:   udpMuxSrflx,
