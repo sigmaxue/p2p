@@ -100,14 +100,14 @@ func remoteAuth(w http.ResponseWriter, r *http.Request) {
 
 	for _, v := range sdpr.candidate {
 		fmt.Printf("Remote candidate: %s\n", v)
-		// c, err := ice.UnmarshalCandidate(v)
-		// if err != nil {
-		// 	panic(err)
-		// }
+		c, err := ice.UnmarshalCandidate(v)
+		if err != nil {
+			panic(err)
+		}
 
-		// if err := iceAgent.AddRemoteCandidate(c); err != nil { //nolint:contextcheck
-		// 	panic(err)
-		// }
+		if err := iceAgent.AddRemoteCandidate(c); err != nil { //nolint:contextcheck
+			panic(err)
+		}
 	}
 	// 序列化为 JSON 字符串
 	jsonData := MarshalSdp(sdp)
@@ -125,7 +125,7 @@ func remoteAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() { //nolint
-	hostip := flag.String("ip", "1.1.1.1", "sdp host ip")
+	//hostip := flag.String("ip", "1.1.1.1", "sdp host ip")
 	remoteufrag := flag.String("remoteufrag", "psUOJWvuCSmEMrya", "sdp ufrag")
 	remotepwd := flag.String("remotepwd", "cQnlwKvsvBYqhPFvJWcwQkCflGYlDBDv", "sdp pwd")
 	ufrag := flag.String("ufrag", "omHaRLkERRNpethp", "sdp ufrag")
@@ -159,8 +159,8 @@ func main() { //nolint
 	//udpMuxSrflx := ice.NewUniversalUDPMuxDefault(ice.UniversalUDPMuxParams{UDPConn: udpconn,})
 
 	cfg := &ice.AgentConfig{
-		NAT1To1IPs:             []string{*hostip},
-		NAT1To1IPCandidateType: ice.CandidateTypeHost,
+		//NAT1To1IPs:             []string{*hostip},
+		//NAT1To1IPCandidateType: ice.CandidateTypeHost,
 		LocalUfrag: *ufrag,
 		LocalPwd: *pwd,
 		UDPMux:                 mux,
