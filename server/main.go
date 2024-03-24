@@ -24,11 +24,12 @@ import (
 //nolint:gochecknoglobals
 var (
 	iceAgent          *ice.Agent
-	remoteAuthChannel chan string
+	rufrag string
+	rpwd   string
+	err  error
+	conn *ice.Conn
 )
-var remoteUfrag = ""
-var remotePwd = ""
-var localCandidate []string
+var hostCandidate = "4014588048 1 udp 2130706431 118.195.187.166 9000 typ host"
 
 type SDP struct {
 	ufrag     string   `json:"ufrag"`
@@ -85,20 +86,28 @@ func remoteAuth(w http.ResponseWriter, r *http.Request) {
 	if err = r.ParseForm(); err != nil {
 		panic(err)
 	}
+	
 
 	// 反序列化为数据结构
 	var sdpr SDP
 	sdpr = UnMarshalSdp(r.PostForm["sdp"][0])
+	iceAgent.Restart(sdp.ufrag,sdp.pwd)
+	iceAgent.SetRemoteCredentials(sdpr.ufrag, sdpr.pwd)
+	// Start the ICE Agent. One side must be controlled, and the other must be controlling
+	if err = iceAgent.GatherCandidates(); err != nil {
+		panic(err)
+	}
+
 	for _, v := range sdpr.candidate {
 		fmt.Printf("Remote candidate: %s\n", v)
-		c, err := ice.UnmarshalCandidate(v)
-		if err != nil {
-			panic(err)
-		}
+		// c, err := ice.UnmarshalCandidate(v)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
-		if err := iceAgent.AddRemoteCandidate(c); err != nil { //nolint:contextcheck
-			panic(err)
-		}
+		// if err := iceAgent.AddRemoteCandidate(c); err != nil { //nolint:contextcheck
+		// 	panic(err)
+		// }
 	}
 	// 序列化为 JSON 字符串
 	jsonData := MarshalSdp(sdp)
@@ -113,21 +122,19 @@ func remoteAuth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprint(len(response)))
 	w.Write([]byte(response))
 
-	remoteAuthChannel <- sdpr.ufrag
-	remoteAuthChannel <- sdpr.pwd
 }
 
 func main() { //nolint
-	var (
-		err  error
-		conn *ice.Conn
-	)
-
-	remoteAuthChannel = make(chan string, 3)
 	hostip := flag.String("ip", "1.1.1.1", "sdp host ip")
+	remoteufrag := flag.String("remoteufrag", "psUOJWvuCSmEMrya", "sdp ufrag")
+	remotepwd := flag.String("remotepwd", "cQnlwKvsvBYqhPFvJWcwQkCflGYlDBDv", "sdp pwd")
+	ufrag := flag.String("ufrag", "omHaRLkERRNpethp", "sdp ufrag")
+	pwd := flag.String("pwd", "bRLcmGIewhYyBQPolTrQbqvouPtkPeGn", "sdp pwd")
 	localHTTPPort := flag.Int("port", 9000, "local listen port")
 	flag.Parse()
 
+	rufrag = *remoteufrag
+	rpwd = *remotepwd
 	http.HandleFunc("/remoteAuth", remoteAuth)
 	go func() {
 		if err = http.ListenAndServe(fmt.Sprintf(":%d", *localHTTPPort), nil); err != nil { //nolint:gosec
@@ -154,6 +161,8 @@ func main() { //nolint
 	cfg := &ice.AgentConfig{
 		NAT1To1IPs:             []string{*hostip},
 		NAT1To1IPCandidateType: ice.CandidateTypeHost,
+		LocalUfrag: *ufrag,
+		LocalPwd: *pwd,
 		UDPMux:                 mux,
 		//UDPMuxSrflx:   udpMuxSrflx,
 		NetworkTypes:  []ice.NetworkType{ice.NetworkTypeUDP4},
@@ -171,14 +180,12 @@ func main() { //nolint
 	if err != nil {
 		panic(err)
 	}
-
+	sdp.candidate = append(sdp.candidate, hostCandidate)
 	// When we have gathered a new ICE Candidate send it to the remote peer
 	if err = iceAgent.OnCandidate(func(c ice.Candidate) {
 		if c == nil {
 			return
 		}
-		localCandidate = append(localCandidate, c.Marshal())
-		sdp.candidate = localCandidate
 		fmt.Println(c.Marshal())
 	}); err != nil {
 		panic(err)
@@ -206,11 +213,7 @@ func main() { //nolint
 
 	fmt.Println("Local Agent is controlling")
 
-	remoteUfrag = <-remoteAuthChannel
-	remotePwd = <-remoteAuthChannel
-	fmt.Printf("%s => %s \n", remoteUfrag, remotePwd)
-
-	conn, err = iceAgent.Accept(context.TODO(), remoteUfrag, remotePwd)
+	conn, err = iceAgent.Accept(context.TODO(), *remoteufrag, *remotepwd)
 	if err != nil {
 		panic(err)
 	}
